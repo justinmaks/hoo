@@ -2,7 +2,7 @@
 
 Real-time network traffic monitor for the terminal. Think `htop` meets `tcpdump`.
 
-Built for engineers and security practitioners who need instant visibility into what their machine, dev environment, or server is talking to — without standing up infrastructure.
+Built for engineers and security practitioners who need instant visibility into what their machine, dev environment, or server is talking to without standing up infrastructure.
 
 ## Features
 
