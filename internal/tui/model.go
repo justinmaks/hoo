@@ -9,6 +9,7 @@ import (
 	"github.com/justinmaks/hoo/internal/aggregate"
 	"github.com/justinmaks/hoo/internal/anomaly"
 	"github.com/justinmaks/hoo/internal/capture"
+	"github.com/justinmaks/hoo/internal/decode"
 	"github.com/justinmaks/hoo/internal/resolve"
 )
 
@@ -21,6 +22,9 @@ const (
 	ViewConnections
 	ViewProtocols
 	ViewNetMap
+	ViewOpenPorts
+	ViewInbound
+	ViewOutbound
 )
 
 // tickMsg triggers periodic TUI refresh.
@@ -184,6 +188,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 
+		case "5":
+			if m.focusedView == ViewOpenPorts {
+				m.focusedView = ViewAll
+			} else {
+				m.focusedView = ViewOpenPorts
+			}
+			return m, nil
+
+		case "6":
+			if m.focusedView == ViewInbound {
+				m.focusedView = ViewAll
+			} else {
+				m.focusedView = ViewInbound
+			}
+			return m, nil
+
+		case "7":
+			if m.focusedView == ViewOutbound {
+				m.focusedView = ViewAll
+			} else {
+				m.focusedView = ViewOutbound
+			}
+			return m, nil
+
 		case "e":
 			if m.OnExport != nil {
 				m.statusMsg = m.OnExport()
@@ -294,8 +322,23 @@ func (m Model) View() string {
 			renderProtocolBreakdown(snap.Protocols, panelWidth-4))
 
 	case ViewNetMap:
-		alerts := m.detector.Alerts()
-		content = renderNetMap(snap, alerts, m.resolver, m.localIP, m.iface, m.width, contentHeight)
+		var alertList []anomaly.Alert
+		if m.detector != nil {
+			alertList = m.detector.Alerts()
+		}
+		content = renderNetMap(snap, alertList, m.resolver, m.localIP, m.iface, m.width, contentHeight)
+
+	case ViewOpenPorts:
+		content = panelStyle.Width(panelWidth).Height(contentHeight).MaxHeight(contentHeight).Render(
+			renderOpenPorts(snap.Connections, panelWidth-4, contentHeight-2, m.cursor, m.resolver))
+
+	case ViewInbound:
+		content = panelStyle.Width(panelWidth).Height(contentHeight).MaxHeight(contentHeight).Render(
+			renderDirectionalTable(snap.Connections, decode.DirectionInbound, panelWidth-4, contentHeight-2, m.cursor, m.resolver))
+
+	case ViewOutbound:
+		content = panelStyle.Width(panelWidth).Height(contentHeight).MaxHeight(contentHeight).Render(
+			renderDirectionalTable(snap.Connections, decode.DirectionOutbound, panelWidth-4, contentHeight-2, m.cursor, m.resolver))
 
 	default: // ViewAll
 		halfWidth := panelWidth/2 - 1

@@ -228,7 +228,7 @@ func renderStatusBar(width int, filter string, paused bool, dropCount uint64, al
 		}
 	}
 
-	right := "q:quit  ?:help  p:pause  s:sort  /:filter  1-4:views  e:export  r:report"
+	right := "q:quit  ?:help  p:pause  /:filter  1-7:views  e:export  r:report"
 
 	left := strings.Join(parts, "  │  ")
 	padding := width - len(left) - len(right)
@@ -243,11 +243,14 @@ func renderHelp(width, height int) string {
 	help := `KEYBOARD SHORTCUTS
 
 Navigation
-  ↑/↓/j/k    Scroll connection table
+  ↑/↓/j/k    Scroll table
   1           Bandwidth view
   2           Connections view
   3           Protocol breakdown
   4           Network map
+  5           Open ports
+  6           Inbound traffic
+  7           Outbound traffic
 
 Controls
   p           Pause/resume capture

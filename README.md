@@ -94,6 +94,9 @@ hoo --direction inbound
 | `2` | Focus connections view |
 | `3` | Focus protocols view |
 | `4` | Network map visualizer |
+| `5` | Open ports (what's talking to you) |
+| `6` | Inbound traffic table |
+| `7` | Outbound traffic table |
 | `e` | Export CSV snapshot |
 | `r` | Generate report |
 | `↑`/`↓`/`j`/`k` | Scroll connection table |
