@@ -70,11 +70,11 @@ jobs:
 
           # Add arm64 sources from ports.ubuntu.com
           CODENAME=$(lsb_release -cs)
-          printf 'deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports %s main restricted universe multiverse\n
-deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports %s-updates main restricted universe multiverse\n
-deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports %s-security main restricted universe multiverse\n' \
-            "$CODENAME" "$CODENAME" "$CODENAME" \
-            | sudo tee /etc/apt/sources.list.d/arm64-ports.list
+          {
+            echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports ${CODENAME} main restricted universe multiverse"
+            echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports ${CODENAME}-updates main restricted universe multiverse"
+            echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports ${CODENAME}-security main restricted universe multiverse"
+          } | sudo tee /etc/apt/sources.list.d/arm64-ports.list
 
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu libpcap-dev:arm64
