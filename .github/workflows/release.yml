@@ -13,6 +13,7 @@ jobs:
     name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
     runs-on: ${{ matrix.runner }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - runner: ubuntu-latest
@@ -55,9 +56,26 @@ jobs:
         if: matrix.install_cross
         run: |
           sudo dpkg --add-architecture arm64
-          sudo sed -i 's/^deb /deb [arch=amd64] /' /etc/apt/sources.list
-          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports $(lsb_release -cs) main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list
-          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports $(lsb_release -cs)-updates main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list
+
+          # Ubuntu 24.04 uses DEB822 format (.sources files); older releases
+          # use the one-liner sources.list format. Restrict the existing entries
+          # to amd64 only — arm64 packages live on ports.ubuntu.com, not on
+          # archive.ubuntu.com or security.ubuntu.com.
+          if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+            sudo sed -i '/^Types: deb$/a Architectures: amd64' \
+              /etc/apt/sources.list.d/ubuntu.sources
+          else
+            sudo sed -i 's/^deb /deb [arch=amd64] /' /etc/apt/sources.list
+          fi
+
+          # Add arm64 sources from ports.ubuntu.com
+          CODENAME=$(lsb_release -cs)
+          printf 'deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports %s main restricted universe multiverse\n
+deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports %s-updates main restricted universe multiverse\n
+deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports %s-security main restricted universe multiverse\n' \
+            "$CODENAME" "$CODENAME" "$CODENAME" \
+            | sudo tee /etc/apt/sources.list.d/arm64-ports.list
+
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu libpcap-dev:arm64
 
@@ -80,7 +98,10 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: "1"
           CC: ${{ matrix.cc }}
-          PKG_CONFIG_PATH: ${{ matrix.install_cross && '/usr/lib/aarch64-linux-gnu/pkgconfig' || '' }}
+          # For arm64 cross-compilation, point directly at the arm64 libpcap
+          # instead of relying on pkg-config finding the right multiarch path.
+          CGO_CFLAGS:  ${{ matrix.install_cross && '-I/usr/include'                      || '' }}
+          CGO_LDFLAGS: ${{ matrix.install_cross && '-L/usr/lib/aarch64-linux-gnu -lpcap' || '' }}
         run: |
           go build \
             -trimpath \
