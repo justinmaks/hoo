@@ -1,0 +1,177 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            cc: gcc
+
+          - runner: ubuntu-latest
+            goos: linux
+            goarch: arm64
+            cc: aarch64-linux-gnu-gcc
+            install_cross: true
+
+          - runner: macos-13
+            goos: darwin
+            goarch: amd64
+            cc: clang
+
+          - runner: macos-latest
+            goos: darwin
+            goarch: arm64
+            cc: clang
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # needed for git describe --tags
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install libpcap (Linux native)
+        if: runner.os == 'Linux' && !matrix.install_cross
+        run: sudo apt-get install -y libpcap-dev
+
+      - name: Install libpcap + cross-compiler (Linux arm64)
+        if: matrix.install_cross
+        run: |
+          sudo dpkg --add-architecture arm64
+          sudo sed -i 's/^deb /deb [arch=amd64] /' /etc/apt/sources.list
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports $(lsb_release -cs) main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports $(lsb_release -cs)-updates main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu libpcap-dev:arm64
+
+      - name: Set build metadata
+        id: meta
+        shell: bash
+        run: |
+          VERSION=${GITHUB_REF_NAME}
+          COMMIT=$(git rev-parse --short HEAD)
+          DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          BINARY=hoo-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "commit=${COMMIT}"   >> "$GITHUB_OUTPUT"
+          echo "date=${DATE}"       >> "$GITHUB_OUTPUT"
+          echo "binary=${BINARY}"   >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "1"
+          CC: ${{ matrix.cc }}
+          PKG_CONFIG_PATH: ${{ matrix.install_cross && '/usr/lib/aarch64-linux-gnu/pkgconfig' || '' }}
+        run: |
+          go build \
+            -trimpath \
+            -ldflags "-s -w \
+              -X 'github.com/justinmaks/hoo/internal/cmd.version=${{ steps.meta.outputs.version }}' \
+              -X 'github.com/justinmaks/hoo/internal/cmd.commit=${{ steps.meta.outputs.commit }}' \
+              -X 'github.com/justinmaks/hoo/internal/cmd.date=${{ steps.meta.outputs.date }}'" \
+            -o "${{ steps.meta.outputs.binary }}" \
+            ./cmd/hoo
+
+      - name: Create archive
+        shell: bash
+        run: |
+          BINARY=${{ steps.meta.outputs.binary }}
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            zip "${BINARY}.zip" "${BINARY}.exe" README.md LICENSE
+            echo "ASSET=${BINARY}.zip" >> "$GITHUB_ENV"
+          else
+            tar czf "${BINARY}.tar.gz" "${BINARY}" README.md LICENSE
+            echo "ASSET=${BINARY}.tar.gz" >> "$GITHUB_ENV"
+          fi
+
+      - name: Generate checksum
+        run: sha256sum "$ASSET" > "$ASSET.sha256"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.binary }}
+          path: |
+            ${{ env.ASSET }}
+            ${{ env.ASSET }}.sha256
+          retention-days: 1
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          VERSION=${GITHUB_REF_NAME}
+          PREV=$(git describe --tags --abbrev=0 "${VERSION}^" 2>/dev/null || echo "")
+
+          {
+            echo "## What's Changed"
+            echo ""
+            if [ -n "$PREV" ]; then
+              git log --pretty=format:"- %s (%h)" "${PREV}..${VERSION}"
+            else
+              git log --pretty=format:"- %s (%h)"
+            fi
+            echo ""
+            echo ""
+            echo "## Installation"
+            echo ""
+            echo "Download the archive for your platform, extract, and move \`hoo\` to your PATH."
+            echo ""
+            echo "**Linux** — requires \`libpcap\`:"
+            echo "\`\`\`bash"
+            echo "sudo apt install libpcap-dev   # Debian/Ubuntu"
+            echo "sudo dnf install libpcap-devel # Fedora/RHEL"
+            echo "\`\`\`"
+            echo ""
+            echo "**Privileges:** see the README for \`setcap\` or \`sudo\` instructions."
+            echo ""
+            echo "## Checksums"
+            echo ""
+            echo "\`\`\`"
+            cat dist/*.sha256
+            echo "\`\`\`"
+          } > release_notes.md
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          body_path: release_notes.md
+          files: dist/**
+          fail_on_unmatched_files: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
