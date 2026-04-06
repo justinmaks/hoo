@@ -4,6 +4,8 @@ Real-time network traffic monitor for the terminal. Think `htop` meets `tcpdump`
 
 Built for engineers and security practitioners who need instant visibility into what their machine, dev environment, or server is talking to without standing up infrastructure.
 
+![hoo dashboard](docs/1.png)
+
 ## Features
 
 - **Network map** — radial visualizer with your machine at center, remote hosts color-coded by protocol, anomalous connections flagged in red
@@ -112,6 +114,8 @@ Press the number key to focus a view. Press it again to return to the default la
 | `7` | Outbound | All traffic your machine is sending out |
 
 The **network map** (view 4) is the default. Anomalous connections appear with `⚠` borders and red highlighting. Line style indicates bandwidth: `─` for normal, `═` for high-volume, `!` for flagged.
+
+![network map](docs/3.png)
 
 ## Keyboard Shortcuts
 
